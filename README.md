@@ -31,6 +31,22 @@ AI-powered job application assistant. Upload your resume, set your target role, 
 └───────────────┘              └──────────────┘             └──────────────┘
 ```
 
+## AI Pipeline (n8n)
+
+The full workflow is included in [`n8n/ApplyIQ-workflow.json`](n8n/ApplyIQ-workflow.json) — 22 nodes:
+
+1. **Webhook** receives the submission from the web form
+2. **Resume Screening AI** parses and profiles the resume
+3. **CV Improvement AI** generates improvement suggestions
+4. **Generate Job Titles AI** expands the target role into search queries
+5. **Google Jobs search** (SerpApi) pulls live listings
+6. **Job Scoring AI** scores each listing against the resume (loop)
+7. **Filter** keeps only worthwhile matches
+8. **Cover Letter AI** writes a tailored cover letter per job
+9. **Supabase** stores the final rows for the dashboard
+
+To use it: import the JSON into n8n, then attach your own credentials (OpenAI, SerpApi, Supabase) — all credential IDs have been stripped.
+
 ## Getting Started
 
 ```bash
@@ -62,4 +78,4 @@ Requires a `job_applications` table with (at minimum): `submitter_email`, `job_t
 
 ## Author
 
-**Nanda Prasetya** — AI Engineer & Prompt Trainer, Yogyakarta 🇮🇩
+**Rizky Nanda Praditia** — AI Engineer & Prompt Trainer, Yogyakarta 🇮🇩

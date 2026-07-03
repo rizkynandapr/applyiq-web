@@ -1,0 +1,732 @@
+{
+  "name": "ApplyIQ",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ApplyIQ",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -240,
+        0
+      ],
+      "id": "58cbdc33-f74a-4531-af38-8600db321fd8",
+      "name": "Webhook"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Extract a complete candidate profile from this resume.\n\nResume:\n{{ $json.body.resume_text }}\n\nUser's stated target job: {{ $json.body.target_job }}\nUser's stated experience level: {{ $json.body.experience_level }}\n\nReturn ONLY this JSON:\n{\n  \"candidate_name\": \"\",\n  \"experience_level\": \"\",\n  \"years_of_experience\": 0,\n  \"key_skills\": [],\n  \"soft_skills\": [],\n  \"domains\": [],\n  \"education\": \"\",\n  \"notable_projects\": [],\n  \"certifications\": [],\n  \"preferred_job_titles\": [],\n  \"strengths\": [],\n  \"weaknesses\": [],\n  \"recommended_keywords\": []\n}\n\nRules:\n- experience_level: exactly one of \"fresh-graduate\", \"junior\", \"mid-level\", \"senior\" — infer from resume AND user input\n- key_skills: ALL technical skills found (tools, languages, frameworks)\n- notable_projects: max 3, each as short string \"name — impact/metric\"\n- preferred_job_titles: 5 titles this candidate realistically qualifies for, aligned with the user's target job\n- weaknesses: gaps relative to the target job (be honest)\n- recommended_keywords: ATS keywords missing from resume but expected for target job",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are a resume parsing engine. Return ONLY valid JSON starting with { and ending with }. No markdown, no explanation, no text outside JSON. Analyze deeply — never leave arrays empty if information exists in the resume."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        16,
+        0
+      ],
+      "id": "fd840d28-11e1-4188-ae33-8b7770af9a3c",
+      "name": "Resume Screening AI"
+    },
+    {
+      "parameters": {
+        "jsCode": "const aiOutput = $input.first().json.text || '';\n\nlet cleaned = aiOutput.replace(/```json/g, '').replace(/```/g, '').trim();\nconst jsonMatch = cleaned.match(/\\{[\\s\\S]*\\}/);\nif (jsonMatch) cleaned = jsonMatch[0];\n\nconst formData = $('Webhook').first().json.body;\nconst userTargetJob = formData.target_job || '';\nconst userLocation = formData.target_location || 'Indonesia';\nconst userExpLevel = formData.experience_level || 'fresh-graduate';\n\nlet parsed;\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  parsed = {};\n}\n\n// Merge dengan default agar semua field selalu ada\nconst profile = {\n  candidate_name: parsed.candidate_name || formData.full_name || '',\n  experience_level: parsed.experience_level || userExpLevel,\n  years_of_experience: parsed.years_of_experience ?? 0,\n  key_skills: parsed.key_skills || [],\n  soft_skills: parsed.soft_skills || [],\n  domains: parsed.domains || [],\n  education: parsed.education || '',\n  notable_projects: parsed.notable_projects || [],\n  certifications: parsed.certifications || [],\n  preferred_job_titles: (parsed.preferred_job_titles && parsed.preferred_job_titles.length > 0)\n    ? parsed.preferred_job_titles\n    : [userTargetJob],\n  strengths: parsed.strengths || [],\n  weaknesses: parsed.weaknesses || [],\n  recommended_keywords: parsed.recommended_keywords || []\n};\n\nreturn [{\n  json: {\n    candidate_profile: profile,\n    resume_text: formData.resume_text || '',\n    target_location: userLocation,\n    target_job: userTargetJob,\n    email: formData.email || '',\n    full_name: formData.full_name || ''\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        336,
+        0
+      ],
+      "id": "5d0928c8-6f9a-4386-83c5-9014dffbccca",
+      "name": "Parse Resume"
+    },
+    {
+      "parameters": {
+        "jsCode": "const aiOutput = $input.first().json.text || '';\n\nlet cleaned = aiOutput.replace(/```json/g, '').replace(/```/g, '').trim();\nconst jsonMatch = cleaned.match(/\\{[\\s\\S]*\\}/);\nif (jsonMatch) cleaned = jsonMatch[0];\n\nlet parsed;\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  parsed = {\n    ats_score: 0,\n    score_breakdown: {},\n    strengths: [],\n    what_to_add: [],\n    what_to_remove: [],\n    keyword_suggestions: [],\n    rewrite_suggestions: [],\n    overall_advice: 'Analisa CV gagal diproses. Silakan coba lagi.'\n  };\n}\n\nreturn [{\n  json: {\n    ...($('Parse Job Titles').first().json),\n    cv_improvement: parsed\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1488,
+        0
+      ],
+      "id": "73eb4d44-8fad-4983-bc7c-9c77c475505f",
+      "name": "Parse CV Improvement"
+    },
+    {
+      "parameters": {
+        "operation": "google_jobs",
+        "q": "={{ $json.search_query }}",
+        "additionalFields": {
+          "gl": "id",
+          "hl": "id"
+        },
+        "requestOptions": {}
+      },
+      "type": "n8n-nodes-serpapi.serpApi",
+      "typeVersion": 1,
+      "position": [
+        1888,
+        0
+      ],
+      "id": "e0b393b6-e323-41d9-929d-aae64524b4d8",
+      "name": "Google_jobs search",
+      "credentials": {
+        "serpApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL",
+          "name": "SerpApi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2304,
+        0
+      ],
+      "id": "a604762d-443c-4f17-b616-77f5431cab86",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Score this candidate against this specific job.\n\nCANDIDATE:\n- Skills: {{ $json.candidate_profile.key_skills }}\n- Experience level: {{ $json.candidate_profile.experience_level }}\n- Projects: {{ $json.candidate_profile.notable_projects }}\n- Certifications: {{ $json.candidate_profile.certifications }}\n\nJOB:\n- Title: {{ $json.title }}\n- Company: {{ $json.company_name }}\n- Location: {{ $json.location }}\n- Description: {{ $json.description }}\n\nReturn ONLY:\n{\n  \"match_score\": 0,\n  \"matched_skills\": [],\n  \"missing_skills\": [],\n  \"recommendation\": \"apply\",\n  \"reason\": \"\",\n  \"seniority_mismatch\": false\n}\n\nScoring method:\n1. List the CORE required skills from the job description (ignore nice-to-have requirements like \"X years experience\", university status, or soft skills)\n2. matched_skills = core requirements the candidate has evidence for\n3. missing_skills = core requirements the candidate lacks\n4. match_score = (matched / total core) × 100, adjusted:\n   - +10 if candidate has a relevant project or certification\n   - -15 ONLY if the job explicitly requires senior/managerial level (5+ years)\n5. recommendation = \"apply\" if match_score >= 35, else \"skip\"\n6. For fresh-graduate candidates: entry-level, junior, internship, and associate roles should almost always be \"apply\" if 2+ core skills match\n7. reason: 1-2 kalimat Bahasa Indonesia, sebutkan skill yang match dan yang kurang",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are a strict but fair recruitment expert for the Indonesian job market. Return ONLY valid JSON. No text outside JSON. Calculate scores from actual evidence — never use default or placeholder scores."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        2416,
+        176
+      ],
+      "id": "db10bc05-fe19-4c7d-bc7e-50e02ade3b29",
+      "name": "Job Scoring AI "
+    },
+    {
+      "parameters": {
+        "jsCode": "const aiOutput = $input.first().json.text || '';\n\nlet cleaned = aiOutput.replace(/```json/g, '').replace(/```/g, '').trim();\nconst jsonMatch = cleaned.match(/\\{[\\s\\S]*\\}/);\nif (jsonMatch) cleaned = jsonMatch[0];\n\nlet parsed;\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  parsed = { match_score: 0, matched_skills: [], missing_skills: [], recommendation: 'skip', reason: 'Parse gagal' };\n}\n\nconst rec = (parsed.recommendation || '').toLowerCase().trim();\n\n// ✅ FIX: ambil data job dari Loop Over Items, bukan dari output AI\nconst jobData = $('Loop Over Items').item.json;\n\nreturn [{\n  json: {\n    match_score: Number(parsed.match_score) || 0,\n    matched_skills: parsed.matched_skills || [],\n    missing_skills: parsed.missing_skills || [],\n    recommendation: rec.includes('apply') ? 'apply' : 'skip',\n    reason: parsed.reason || '',\n    job_title: jobData.title || 'N/A',\n    company: jobData.company_name || 'N/A',\n    job_location: jobData.location || '',\n    job_link: jobData.apply_options?.[0]?.link || jobData.share_link || '',\n    candidate_profile: jobData.candidate_profile,\n    resume_text: jobData.resume_text,\n    cv_improvement: jobData.cv_improvement,\n    email: jobData.email,\n    full_name: jobData.full_name\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2656,
+        384
+      ],
+      "id": "056be34e-08ca-4731-afea-515bb60f26d6",
+      "name": "Parse Job Scoring"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "b7e5ec49-721f-4f86-a4be-92d72d0695a1",
+              "leftValue": "={{ $json.recommendation }}",
+              "rightValue": "apply",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        2768,
+        176
+      ],
+      "id": "231360ce-a191-4b25-ba2e-05d3c6ccdeea",
+      "name": "Filter Job"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Tulis cover letter Bahasa Indonesia untuk lamaran ini.\n\nKandidat: {{ $json.full_name }}\nPosisi: {{ $json.job_title }}\nPerusahaan: {{ $json.company }}\nSkills yang match dengan job: {{ $json.matched_skills }}\nResume lengkap: {{ $json.resume_text }}\n\nStruktur wajib (3 paragraf):\n1. Perkenalan + alasan spesifik tertarik pada posisi {{ $json.job_title }} di {{ $json.company }}\n2. 2-3 pencapaian KONKRET dari resume dengan angka (proyek, metrik, hasil) yang relevan dengan matched_skills\n3. Penutup profesional + ajakan interview\n\nLarangan:\n- Tidak boleh ada kalimat klise (\"pekerja keras\", \"mampu bekerja dalam tim\")\n- Tidak boleh menyebut skill yang TIDAK ada di resume\n- Maksimal 250 kata",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "Kamu adalah career coach profesional untuk pasar kerja Indonesia. Tulis cover letter yang personal, spesifik, dan meyakinkan. Output plain text saja tanpa markdown."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        2880,
+        384
+      ],
+      "id": "9e57554a-3b81-46b4-81e4-9a7ca69bbba0",
+      "name": "Cover Latter AI"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Data job dari node sebelum Cover Letter AI\nconst d = $('Filter Job').item.json;\n\nreturn [{\n  json: {\n    job_title: d.job_title,\n    company: d.company,\n    match_score: d.match_score,\n    recommendation: d.recommendation,\n    reason: d.reason,\n    job_link: d.job_link,\n    cover_letter: $input.first().json.text || '',\n    email: d.email,\n    full_name: d.full_name,\n    cv_improvement: JSON.stringify(d.cv_improvement),\n    status: 'new'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3120,
+        192
+      ],
+      "id": "6b29c6a4-753f-4ab9-8ff1-607aab74625d",
+      "name": "Final Data"
+    },
+    {
+      "parameters": {
+        "tableId": "job_applications",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "job_title",
+              "fieldValue": "={{ $json.job_title }}"
+            },
+            {
+              "fieldId": "company",
+              "fieldValue": "={{ $json.company }}"
+            },
+            {
+              "fieldId": "match_score",
+              "fieldValue": "={{ $json.match_score }}"
+            },
+            {
+              "fieldId": "recommendation",
+              "fieldValue": "={{ $json.recommendation }}"
+            },
+            {
+              "fieldId": "cover_letter",
+              "fieldValue": "={{ $json.cover_letter }}"
+            },
+            {
+              "fieldId": "job_link",
+              "fieldValue": "={{ $json.job_link }}"
+            },
+            {
+              "fieldId": "submitter_email",
+              "fieldValue": "={{ $json.email }}"
+            },
+            {
+              "fieldId": "cv_improvement",
+              "fieldValue": "={{ $json.cv_improvement }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "new"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        3232,
+        368
+      ],
+      "id": "863a3967-c012-43fc-be8d-a2edc7e3e7cf",
+      "name": "Create a row",
+      "credentials": {
+        "supabaseApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "cx/gpt-5.5",
+          "mode": "list",
+          "cachedResultName": "cx/gpt-5.5"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        16,
+        256
+      ],
+      "id": "26b82b9b-eb2d-4629-ab3c-3c40166bbf93",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "cx/gpt-5.5",
+          "mode": "list",
+          "cachedResultName": "cx/gpt-5.5"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        544,
+        240
+      ],
+      "id": "70b78bb8-5bec-4ee6-9beb-7f94712313a3",
+      "name": "OpenAI Chat Model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "cx/gpt-5.5",
+          "mode": "list",
+          "cachedResultName": "cx/gpt-5.5"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        2416,
+        592
+      ],
+      "id": "107c7377-86f4-4fdc-ab3f-0a75b786e288",
+      "name": "OpenAI Chat Model2",
+      "credentials": {
+        "openAiApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "cx/gpt-5.5",
+          "mode": "list",
+          "cachedResultName": "cx/gpt-5.5"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        2880,
+        624
+      ],
+      "id": "077dbd29-78da-480e-87aa-f0d7ecf43375",
+      "name": "OpenAI Chat Model3",
+      "credentials": {
+        "openAiApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Generate job search titles for this candidate.\n\nTarget job: \"{{ $json.target_job }}\"\nExperience level: \"{{ $json.candidate_profile.experience_level }}\"\nCandidate skills: {{ $json.candidate_profile.key_skills }}\nCandidate domains: {{ $json.candidate_profile.domains }}\n\nReturn ONLY:\n{\n  \"job_titles\": [\"\", \"\", \"\", \"\", \"\"]\n}\n\nRules:\n- Exactly 5 DIFFERENT titles commonly used on Jobstreet, Glints, LinkedIn Indonesia\n- Title 1 must be the user's target job as-is\n- Titles 2-3: close variations matching the experience level (e.g. add \"Junior\"/\"Associate\" for fresh grads)\n- Titles 4-5: adjacent roles the candidate's skills also qualify for\n- Never invent senior titles for a fresh graduate",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are an Indonesian job market expert. Return ONLY valid JSON. No text outside JSON."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        544,
+        0
+      ],
+      "id": "d2d1cace-04ce-4f9f-aac3-67dc0b1277a9",
+      "name": "Generate Job Titles AI"
+    },
+    {
+      "parameters": {
+        "jsCode": "const aiOutput = $input.first().json.text || '';\n\nlet cleaned = aiOutput.replace(/\\\\n/g, ' ').replace(/```json/g, '').replace(/```/g, '').trim();\nconst jsonMatch = cleaned.match(/\\{[\\s\\S]*\\}/);\nif (jsonMatch) cleaned = jsonMatch[0];\n\nlet jobTitles = [];\ntry {\n  jobTitles = JSON.parse(cleaned).job_titles || [];\n} catch (e) { /* fallback di bawah */ }\n\nconst prevData = $('Parse Resume').first().json;\nconst targetJob = prevData.target_job || '';\n\nif (jobTitles.length === 0) {\n  jobTitles = [targetJob, `Junior ${targetJob}`, `Associate ${targetJob}`];\n}\n\nprevData.candidate_profile.preferred_job_titles = jobTitles;\n\nreturn [{ json: prevData }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ],
+      "id": "f53c8c5e-1ca4-4942-a874-c2f74c8686f1",
+      "name": "Parse Job Titles"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Audit this resume against the target job. Be brutally specific.\n\nResume:\n{{ $('Webhook').first().json.body.resume_text }}\n\nTarget job: {{ $('Webhook').first().json.body.target_job }}\n\nReturn ONLY this JSON:\n{\n  \"ats_score\": 0,\n  \"score_breakdown\": {\n    \"format\": 0,\n    \"keywords\": 0,\n    \"experience\": 0,\n    \"skills\": 0,\n    \"achievements\": 0\n  },\n  \"strengths\": [],\n  \"what_to_add\": [\n    {\"item\": \"\", \"reason\": \"\", \"example\": \"\", \"priority\": \"high\"}\n  ],\n  \"what_to_remove\": [\n    {\"item\": \"\", \"reason\": \"\"}\n  ],\n  \"keyword_suggestions\": [],\n  \"rewrite_suggestions\": [\n    {\"original\": \"\", \"improved\": \"\"}\n  ],\n  \"overall_advice\": \"\"\n}\n\nRules:\n- Each breakdown dimension 0-20; ats_score = exact sum (max 100)\n- what_to_add: 3-5 items, each \"example\" must be a ready-to-paste sentence using the candidate's actual data\n- what_to_remove: quote the actual phrases from the resume\n- rewrite_suggestions: 2-4 items, \"original\" = verbatim bullet from resume, \"improved\" = rewritten with a concrete metric\n- keyword_suggestions: ATS keywords for the target job that are MISSING from this resume\n- overall_advice: 2-3 sentences, direct, in Bahasa Indonesia",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are a senior ATS consultant and recruiter with 10+ years in the Indonesian tech job market. Return ONLY valid JSON. No text outside JSON. Every suggestion MUST reference actual content from the resume — generic advice is forbidden."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        1104,
+        0
+      ],
+      "id": "792bf431-2d24-475b-b25c-dcd3e8daa801",
+      "name": "CV Impovement"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "cx/gpt-5.5",
+          "mode": "list",
+          "cachedResultName": "cx/gpt-5.5"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1104,
+        256
+      ],
+      "id": "719ca3ec-cbd4-43c5-a29f-3ea29fd020cb",
+      "name": "OpenAI Chat Model4",
+      "credentials": {
+        "openAiApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const allItems = $input.all();\nconst allJobs = [];\nconst seen = new Set();\n\nconst prevData = {\n  candidate_profile: $('Parse Job Titles').first().json.candidate_profile,\n  resume_text: $('Parse Job Titles').first().json.resume_text,\n  target_location: $('Parse Job Titles').first().json.target_location,\n  target_job: $('Parse Job Titles').first().json.target_job,\n  email: $('Parse Job Titles').first().json.email,\n  full_name: $('Parse Job Titles').first().json.full_name,\n  cv_improvement: $('Parse CV Improvement').first().json.cv_improvement\n};\n\nfor (const item of allItems) {\n  const jobs = item.json.jobs_results || [];\n  for (const job of jobs) {\n    const key = job.job_id || (job.title + job.company_name);\n    if (!seen.has(key)) {\n      seen.add(key);\n      allJobs.push(job);\n    }\n  }\n}\n\nif (allJobs.length === 0) {\n  return [{ json: { ...prevData, no_jobs: true } }];\n}\n\nreturn allJobs.slice(0, 30).map(job => ({\n  json: { ...job, ...prevData }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2096,
+        0
+      ],
+      "id": "4465e1a4-4260-4f68-a6a4-2f32a5d38b25",
+      "name": "Extract Job "
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst targetJob = data.target_job || '';\nconst location = data.target_location || 'Indonesia';\nconst titles = data.candidate_profile?.preferred_job_titles || [];\n\nconst queries = [\n  `${targetJob} ${location}`,\n  `${titles[1] || targetJob} ${location}`,\n  `${titles[2] || targetJob} ${location}`,\n  `${titles[3] || targetJob} ${location}`,\n  `${titles[4] || 'lowongan ' + targetJob} ${location}`\n];\n\nconst unique = [...new Set(queries.map(q => q.trim()))];\n\nreturn unique.map(q => ({\n  json: { ...data, search_query: q }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1696,
+        0
+      ],
+      "id": "8bdc5a96-14d5-40a5-8587-a82b6b2a030b",
+      "name": "Generate Queries"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Resume Screening AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resume Screening AI": {
+      "main": [
+        [
+          {
+            "node": "Parse Resume",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Resume": {
+      "main": [
+        [
+          {
+            "node": "Generate Job Titles AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse CV Improvement": {
+      "main": [
+        [
+          {
+            "node": "Generate Queries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google_jobs search": {
+      "main": [
+        [
+          {
+            "node": "Extract Job ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Job Scoring AI ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job Scoring AI ": {
+      "main": [
+        [
+          {
+            "node": "Parse Job Scoring",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Job Scoring": {
+      "main": [
+        [
+          {
+            "node": "Filter Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Job": {
+      "main": [
+        [
+          {
+            "node": "Cover Latter AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cover Latter AI": {
+      "main": [
+        [
+          {
+            "node": "Final Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final Data": {
+      "main": [
+        [
+          {
+            "node": "Create a row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create a row": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Resume Screening AI",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Generate Job Titles AI",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Job Scoring AI ",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model3": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Cover Latter AI",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Job Titles AI": {
+      "main": [
+        [
+          {
+            "node": "Parse Job Titles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Job Titles": {
+      "main": [
+        [
+          {
+            "node": "CV Impovement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CV Impovement": {
+      "main": [
+        [
+          {
+            "node": "Parse CV Improvement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model4": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "CV Impovement",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Job ": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Queries": {
+      "main": [
+        [
+          {
+            "node": "Google_jobs search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  }
+}
