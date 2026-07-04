@@ -78,4 +78,4 @@ Requires a `job_applications` table with (at minimum): `submitter_email`, `job_t
 
 ## Author
 
-**Rizky Nanda Praditia** — AI Engineer & Prompt Trainer, Yogyakarta 🇮🇩
+**Rizky Nanda Praditia & Farhan Hamid Lubis** 
