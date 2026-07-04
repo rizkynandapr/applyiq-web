@@ -1,6 +1,6 @@
 # ApplyIQ
 
-AI-powered job application assistant. Upload your resume, set your target role, and get back scored job matches with tailored cover letters — automatically.
+AI-powered job application assistant. Upload your resume, set your target role, and get back scored job matches with tailored cover letters automatically.
 
 **Flow:** React web form → resume parsed in-browser (PDF/DOCX) → sent to an n8n AI pipeline → results stored in Supabase → live dashboard with match scores and generated cover letters.
 
