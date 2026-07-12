@@ -50,7 +50,7 @@ To use it: import the JSON into n8n, then attach your own credentials (OpenAI, S
 ## Getting Started
 
 ```bash
-git clone https://github.com/<your-username>/applyiq-web.git
+git clone https://github.com/rizkynandapr/applyiq-web.git
 cd applyiq-web
 npm install
 cp .env.example .env   # fill in your own values
